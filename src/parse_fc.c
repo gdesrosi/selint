@@ -17,9 +17,11 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <libgen.h>
 
 #include "parse_fc.h"
 #include "tree.h"
+#include "maps.h"
 
 // "gen_context("
 #define GEN_CONTEXT_LEN 12
@@ -228,7 +230,7 @@ bool check_for_fc_macro(const char *line, const struct string_list *custom_fc_ma
 	return false;
 }
 
-struct policy_node *parse_fc_file(const char *filename, const struct string_list *custom_fc_macros)
+struct policy_node* parse_fc_file(const char *filename, const struct string_list *custom_fc_macros)
 {
 	FILE *fd = fopen(filename, "r");
 
@@ -243,22 +245,48 @@ struct policy_node *parse_fc_file(const char *filename, const struct string_list
 	struct policy_node *cur = head;
 
 	char *line = NULL;
+	char *ifdef_condition = NULL;
+	char *ifndef_condition = NULL;
+	char *token = NULL;
 
 	ssize_t len_read = 0;
 	size_t buf_len = 0;
 	unsigned int lineno = 0;
+	bool is_within_ifdef = false;
+	bool is_within_ifndef = false;
 	while ((len_read = getline(&line, &buf_len, fd)) != -1) {
 		lineno++;
 		if (len_read <= 1 || line[0] == '#') {
 			continue;
-		}
-		// Skip over m4 constructs
-		if (strncmp(line, "ifdef", 5) == 0 ||
-		    strncmp(line, "ifndef", 6) == 0 ||
-		    strncmp(line, "')", 2) == 0 ||
-		    strncmp(line, "', `", 4) == 0 ||
-		    strncmp(line, "',`", 3) == 0) {
-
+		} else if (!strncmp(line, "ifdef", 5)) {
+			is_within_ifdef = true;
+			token = strtok(line, "`");
+			if (token) {
+				token = strtok(NULL, "`");
+				token = strtok(token, "'");
+				ifdef_condition = malloc(strlen(token));
+				strcpy(ifdef_condition, token);
+			}
+			continue;
+		} else if (!strncmp(line, "ifndef", 6)) {
+			is_within_ifndef = true;
+			token = strtok(line, "`");
+			if (token) {
+				token = strtok(NULL, "`");
+				token = strtok(token, "'");
+				ifndef_condition = malloc(strlen(token));
+				strcpy(ifndef_condition, token);
+			}
+			continue;
+		} else if (!strncmp(line, "')", 2)) {
+			if (is_within_ifdef) {
+				is_within_ifdef = false;
+			}
+			if (is_within_ifndef) {
+				is_within_ifndef = false;
+			}
+			continue;
+		} else if (!strncmp(line, "', `", 4) || !strncmp(line, "',`", 3)) { // Skip over m4 constructs
 			continue;
 		}
 		// TODO: Right now whitespace parses as an error
@@ -274,22 +302,38 @@ struct policy_node *parse_fc_file(const char *filename, const struct string_list
 			flavor = NODE_ERROR;
 		} else {
 			flavor = NODE_FC_ENTRY;
+			if (is_within_ifdef) {
+				entry->conditional = malloc(sizeof(struct conditional_data));
+				entry->conditional->flavor = CONDITION_IFDEF;
+				entry->conditional->condition = ifdef_condition;
+			} else if (is_within_ifndef) {
+				entry->conditional = malloc(sizeof(struct conditional_data));
+				entry->conditional->flavor = CONDITION_IFNDEF;
+				entry->conditional->condition = ifndef_condition;
+			}
+			struct fc_entry_map_info *info = malloc(sizeof(struct fc_entry_map_info));
+			char *copy = strdup(filename);
+			char *fc_name = basename(copy);
+			info->entry = entry;
+			info->lineno = lineno;
+			info->file_name = strdup(fc_name);
+			insert_into_fcs_entry_map(info);
+			free(copy);
 		}
 
 		union node_data nd;
 		nd.fc_data = entry;
-		if (insert_policy_node_next(cur, flavor, nd, lineno) !=
-		    SELINT_SUCCESS) {
+		if (insert_policy_node_next(cur, flavor, nd, lineno)
+				!= SELINT_SUCCESS) {
 			free_policy_node(head);
 			fclose(fd);
 			return NULL;
 		}
 		cur = cur->next;
-		free(line);
 		line = NULL;
 		buf_len = 0;
 	}
-	free(line);             // getline alloc must be freed even if getline failed
+	free(line);            // getline alloc must be freed even if getline failed
 	fclose(fd);
 
 	return head;

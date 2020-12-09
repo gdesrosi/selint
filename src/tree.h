@@ -19,6 +19,7 @@
 
 #include "selint_error.h"
 #include "string_list.h"
+#include "stdbool.h"
 
 enum node_flavor {
 	NODE_TE_FILE,
@@ -99,6 +100,11 @@ enum tt_flavor {
 	TT_RT
 };
 
+enum condition_flavor{
+	CONDITION_IFDEF ,
+	CONDITION_IFNDEF
+};
+
 struct header_data {
 	enum header_flavor flavor;
 	char *module_name;
@@ -176,10 +182,17 @@ struct sel_context {
 	char *range;
 };
 
+struct conditional_data{
+	char *condition;
+	enum condition_flavor flavor;
+	bool state;
+};
+
 struct fc_entry {
 	char *path;
 	char obj;
 	struct sel_context *context;
+	struct conditional_data *conditional;
 };
 
 struct attribute_data {
