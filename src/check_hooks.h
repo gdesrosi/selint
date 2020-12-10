@@ -67,6 +67,7 @@ enum error_ids {
 	E_ID_UNKNOWN_PERM      = 7,
 	E_ID_UNKNOWN_CLASS     = 8,
 	E_ID_EMPTY_BLOCK       = 9,
+	E_ID_FC_DUPLICATE_ENTRY = 10,
 	E_END
 };
 
