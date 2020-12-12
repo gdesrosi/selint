@@ -291,6 +291,8 @@ void free_fc_entry(struct fc_entry *to_free);
 
 void free_sel_context(struct sel_context *to_free);
 
+void free_conditional_data(struct conditional_data *to_free);
+
 void free_attribute_data(struct attribute_data *to_free);
 
 void free_gen_require_data(struct gen_require_data *to_free);

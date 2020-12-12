@@ -617,6 +617,17 @@ unsigned int permmacros_map_count()
 		free(cur_bool); \
 } \
 
+void free_fc_entry_map_info(struct fc_entry_map_info *to_free)
+{
+	if (to_free->entry){
+		free_fc_entry(to_free->entry);
+	}
+	if (to_free->file_name) {
+		free(to_free->file_name);
+	}
+	free(to_free);
+}
+
 void free_all_maps()
 {
 
@@ -676,7 +687,7 @@ void free_all_maps()
 		HASH_ITER(hh_fc_entry, fcs_entry_map, cur_entry_elm, tmp_entry_elm) {
 			HASH_DELETE(hh_fc_entry, fcs_entry_map, cur_entry_elm);
 			free(cur_entry_elm->key);
-			free(cur_entry_elm->val);
+			free_fc_entry_map_info(cur_entry_elm->val);
 			free(cur_entry_elm);
 		}
 }

@@ -121,6 +121,8 @@ unsigned int permmacros_map_count(void);
 
 unsigned int decl_map_count(enum decl_flavor flavor);
 
+void free_fc_entry_map_info(struct fc_entry_map_info *to_free);
+
 void free_all_maps(void);
 
 #endif

@@ -26,7 +26,7 @@
 // "gen_context("
 #define GEN_CONTEXT_LEN 12
 
-struct fc_entry *parse_fc_line(char *line)
+struct fc_entry *parse_fc_line(char *line, const struct conditional_data *conditional)
 {
 	const char *whitespace = " \t";
 
@@ -148,6 +148,12 @@ struct fc_entry *parse_fc_line(char *line)
 
 	}
 
+	if(conditional){
+		out->conditional = malloc(sizeof(struct conditional_data));
+		out->conditional->flavor = conditional->flavor;
+		out->conditional->condition = conditional->condition;
+	}
+
 	free(orig_line);
 	return out;
 
@@ -248,6 +254,7 @@ struct policy_node* parse_fc_file(const char *filename, const struct string_list
 	char *ifdef_condition = NULL;
 	char *ifndef_condition = NULL;
 	char *token = NULL;
+	struct conditional_data *conditional = NULL;
 
 	ssize_t len_read = 0;
 	size_t buf_len = 0;
@@ -264,7 +271,7 @@ struct policy_node* parse_fc_file(const char *filename, const struct string_list
 			if (token) {
 				token = strtok(NULL, "`");
 				token = strtok(token, "'");
-				ifdef_condition = malloc(strlen(token));
+				ifdef_condition = malloc(strlen(token)+1);
 				strcpy(ifdef_condition, token);
 			}
 			continue;
@@ -274,7 +281,7 @@ struct policy_node* parse_fc_file(const char *filename, const struct string_list
 			if (token) {
 				token = strtok(NULL, "`");
 				token = strtok(token, "'");
-				ifndef_condition = malloc(strlen(token));
+				ifndef_condition = malloc(strlen(token)+1);
 				strcpy(ifndef_condition, token);
 			}
 			continue;
@@ -296,27 +303,34 @@ struct policy_node* parse_fc_file(const char *filename, const struct string_list
 			continue;
 		}
 
-		struct fc_entry *entry = parse_fc_line(line);
+		if (is_within_ifdef) {
+			conditional = malloc(sizeof(struct conditional_data));
+			conditional->flavor = CONDITION_IFDEF;
+			conditional->condition = strdup(ifdef_condition);
+		} else if (is_within_ifndef) {
+			conditional = malloc(sizeof(struct conditional_data));
+			conditional->flavor = CONDITION_IFNDEF;
+		    conditional->condition = strdup(ifndef_condition);
+		}
+
+		struct fc_entry *entry = parse_fc_line(line, conditional);
+
+		free(conditional);
+		conditional = NULL;
+
 		enum node_flavor flavor;
 		if (entry == NULL) {
 			flavor = NODE_ERROR;
 		} else {
 			flavor = NODE_FC_ENTRY;
-			if (is_within_ifdef) {
-				entry->conditional = malloc(sizeof(struct conditional_data));
-				entry->conditional->flavor = CONDITION_IFDEF;
-				entry->conditional->condition = ifdef_condition;
-			} else if (is_within_ifndef) {
-				entry->conditional = malloc(sizeof(struct conditional_data));
-				entry->conditional->flavor = CONDITION_IFNDEF;
-				entry->conditional->condition = ifndef_condition;
-			}
+
 			struct fc_entry_map_info *info = malloc(sizeof(struct fc_entry_map_info));
 			char *copy = strdup(filename);
 			char *fc_name = basename(copy);
 			info->entry = entry;
 			info->lineno = lineno;
 			info->file_name = strdup(fc_name);
+
 			insert_into_fcs_entry_map(info);
 			free(copy);
 		}
@@ -330,9 +344,12 @@ struct policy_node* parse_fc_file(const char *filename, const struct string_list
 			return NULL;
 		}
 		cur = cur->next;
+		free(line);
 		line = NULL;
 		buf_len = 0;
 	}
+	free(ifdef_condition);
+	free(ifndef_condition);
 	free(line);            // getline alloc must be freed even if getline failed
 	fclose(fd);
 
